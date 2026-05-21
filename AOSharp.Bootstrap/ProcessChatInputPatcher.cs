@@ -2,6 +2,7 @@
 using System.Runtime.InteropServices;
 using AOSharp.Common.Helpers;
 using AOSharp.Common.Unmanaged.Imports;
+using Serilog;
 
 namespace AOSharp.Bootstrap
 {
@@ -23,15 +24,28 @@ namespace AOSharp.Bootstrap
             pProcessChatInput = Utils.FindPattern("GUI.dll", ProcessChatInputSig);
             pGetCommand = IntPtr.Zero;
 
+            Log.Information("ProcessChatInputPatcher: pattern scan result = {addr}", pProcessChatInput);
+
             if (pProcessChatInput == IntPtr.Zero)
+            {
+                Log.Warning("ProcessChatInputPatcher: pattern not found in GUI.dll");
                 return false;
+            }
 
             pGetCommand = pProcessChatInput + GetCommandOffset + sizeof(IntPtr) + Marshal.ReadInt32(pProcessChatInput + GetCommandOffset);
 
-            if (pGetCommand == IntPtr.Zero)
-                return false;
+            Log.Information("ProcessChatInputPatcher: pGetCommand = {addr}", pGetCommand);
 
-            if (!Kernel32.VirtualProtectEx(Kernel32.GetCurrentProcess(), pProcessChatInput + CommandNotFoundOffset, (UIntPtr)CommandNotSegmentSize, 0x40 /* EXECUTE_READWRITE */, out uint _))
+            if (pGetCommand == IntPtr.Zero)
+            {
+                Log.Warning("ProcessChatInputPatcher: pGetCommand resolved to zero");
+                return false;
+            }
+
+            bool vpResult = Kernel32.VirtualProtectEx(Kernel32.GetCurrentProcess(), pProcessChatInput + CommandNotFoundOffset, (UIntPtr)CommandNotSegmentSize, 0x40 /* EXECUTE_READWRITE */, out uint _);
+            Log.Information("ProcessChatInputPatcher: VirtualProtect result = {result}", vpResult);
+
+            if (!vpResult)
                 return false;
 
             _pOrig = Marshal.AllocHGlobal((int)CommandNotSegmentSize);

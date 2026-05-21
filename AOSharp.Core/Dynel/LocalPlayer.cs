@@ -87,6 +87,10 @@ namespace AOSharp.Core
                 Pets.Follow();
         }
 
+        public void StopAttack(bool unused) => StopAttack();
+
+        public WeaponHolderInfo WeaponHolder => new WeaponHolderInfo(pWeaponHolder);
+
         public void DisableXpGain(bool enabled)
         {
             Network.Send(new CharacterActionMessage

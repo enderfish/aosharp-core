@@ -1,4 +1,4 @@
-﻿using AOSharp.Common.GameData;
+using AOSharp.Common.GameData;
 using AOSharp.Common.SharedEventArgs;
 using System;
 using System.Collections.Generic;
@@ -208,14 +208,15 @@ namespace AOSharp.Bootstrap
                     }
                 }
 
-                // Find the first AOSharp.Core.IAOPluginEntry
                 Type[] exportedTypes = assembly.GetExportedTypes();
+
                 foreach (Type type in exportedTypes)
                 {
                     if (type.GetInterface("AOSharp.Core.IAOPluginEntry") == null)
                         continue;
 
-                    MethodInfo runMethod = type.GetMethod("Run", BindingFlags.Public | BindingFlags.Instance);
+                    MethodInfo runMethod = type.GetMethod("Run", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(string) }, null)
+                        ?? type.GetMethod("Run", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
 
                     if (runMethod == null)
                         continue;
@@ -234,7 +235,7 @@ namespace AOSharp.Bootstrap
 
                     object instance = constructor.Invoke(null);
 
-                    if (instance == null) //Is this even possible?
+                    if (instance == null)
                         continue;
 
                     _plugins.Add(new Plugin(instance, runMethod, teardownMethod, Path.GetDirectoryName(assemblyPath)));
@@ -242,6 +243,7 @@ namespace AOSharp.Bootstrap
             }
             catch (Exception ex)
             {
+                Serilog.Log.Error("LoadPlugin failed for {path}: {type}: {msg}", assemblyPath, ex.GetType().Name, ex.Message);
             }
         }
 
@@ -251,7 +253,7 @@ namespace AOSharp.Bootstrap
             {
                 if (plugin.Initialized)
                     continue;
-                
+
                 plugin.Initialize();
             }
         }
@@ -287,9 +289,19 @@ namespace AOSharp.Bootstrap
         {
             try
             {
-                _runMethod.Invoke(_instance, new object[] { _assemblyDir });
+                var dirProp = _instance.GetType().GetProperty("PluginDirectory",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                dirProp?.SetValue(_instance, _assemblyDir);
+
+                var args = _runMethod.GetParameters().Length > 0
+                    ? new object[] { _assemblyDir }
+                    : null;
+                _runMethod.Invoke(_instance, args);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Serilog.Log.Error("Plugin.Initialize failed for {type}: {msg}", _instance.GetType().FullName, ex.Message);
+            }
 
             Initialized = true;
         }

@@ -33,6 +33,10 @@ namespace AOSharp.Bootstrap
                 .WriteTo.File("AOSharp.Bootstrapper.txt", restrictedToMinimumLevel: Serilog.Events.LogEventLevel.Debug)
                 .CreateLogger();
 
+            Log.Information("Bootstrap loaded in: {name} (PID={pid})",
+                System.Diagnostics.Process.GetCurrentProcess().ProcessName,
+                System.Diagnostics.Process.GetCurrentProcess().Id);
+
             _connectEvent = new ManualResetEvent(false);
             _unloadEvent = new ManualResetEvent(false);
             _chatSocketListener = new ChatSocketListener();
@@ -60,7 +64,14 @@ namespace AOSharp.Bootstrap
             //Notify the main thread we recieved a connection from the GameController.
             _connectEvent.Set();
 
-            SetupHooks();
+            try
+            {
+                SetupHooks();
+            }
+            catch (Exception e)
+            {
+                Log.Error("SetupHooks failed: {msg}", e.Message);
+            }
         }
 
         private void OnIPCClientDisconnected(IPCServer pipe)
@@ -74,6 +85,8 @@ namespace AOSharp.Bootstrap
             try
             {
                 LoadAssemblyMessage msg = message as LoadAssemblyMessage;
+
+                Log.Information("OnAssembliesChanged: received {count} assemblies", msg?.Assemblies?.Count() ?? 0);
 
                 if (_pluginAppDomain != null)
                 {
@@ -99,7 +112,9 @@ namespace AOSharp.Bootstrap
 
                 foreach (string assembly in msg.Assemblies)
                 {
+                    Log.Information("OnAssembliesChanged: loading {asm}", assembly);
                     _pluginProxy.LoadPlugin(assembly);
+                    Log.Information("OnAssembliesChanged: loaded {asm}", assembly);
                 }
             }
             catch (Exception e)
@@ -215,7 +230,14 @@ namespace AOSharp.Bootstrap
 
         private void CreateHook(string module, string funcName, Delegate newFunc)
         {
-            CreateHook(LocalHook.GetProcAddress(module, funcName), newFunc);
+            try
+            {
+                CreateHook(LocalHook.GetProcAddress(module, funcName), newFunc);
+            }
+            catch (Exception e)
+            {
+                Log.Error("Failed to hook {module}::{func} - {msg}", module, funcName, e.Message);
+            }
         }
 
         public void CreateHook(IntPtr origFunc, Delegate newFunc)
@@ -296,7 +318,10 @@ namespace AOSharp.Bootstrap
         public IntPtr GetCommand_Hook(IntPtr pThis, IntPtr pCmdText, bool unk)
         {
             IntPtr result;
-            if ((result = CommandInterpreter_c.GetCommand(pThis, pCmdText, unk)) == IntPtr.Zero && unk && _pluginProxy != null)
+            result = CommandInterpreter_c.GetCommand(pThis, pCmdText, unk);
+            Log.Information("GetCommand_Hook: unk={unk} result={result} lastInput={input} proxyNull={proxyNull}",
+                unk, result, _lastChatInput, _pluginProxy == null);
+            if (result == IntPtr.Zero && unk && _pluginProxy != null)
                 _pluginProxy?.UnknownChatCommand(_lastChatInputWindowPtr, _lastChatInput);
 
             return result;

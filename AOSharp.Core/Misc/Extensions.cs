@@ -49,6 +49,11 @@ namespace AOSharp.Core
             return buffs.Any(b => (NanoLine) b.GetStat(Stat.NanoStrain) == nanoline);
         }
 
+        public static bool Contains(this Buff[] buffs, NanoLine[] nanolines)
+        {
+            return buffs.Any(b => nanolines.Contains((NanoLine)b.GetStat(Stat.NanoStrain)));
+        }
+
         public static IEnumerable<Spell> OrderByStackingOrder(this IEnumerable<Spell> spells)
         {
             return spells.OrderByDescending(x => x.StackingOrder);
