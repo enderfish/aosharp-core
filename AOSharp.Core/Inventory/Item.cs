@@ -22,6 +22,8 @@ namespace AOSharp.Core.Inventory
         public readonly int Charges;
         public List<EquipSlot> EquipSlots => GetEquipSlots();
 
+        public bool IsEquipped => Slot.Type != IdentityType.None && Enum.IsDefined(typeof(EquipSlot), (int)Slot.Instance);
+
         public static EventHandler<ItemUsedEventArgs> ItemUsed;
 
         public static bool HasPendingUse => _pendingUse.Slot != Identity.None;

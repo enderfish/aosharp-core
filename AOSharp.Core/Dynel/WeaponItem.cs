@@ -12,6 +12,10 @@ namespace AOSharp.Core
     {
         public float AttackRange => GetStat(Stat.AttackRange);
 
+        public int Ammo => -1;
+        public int MaxAmmo => 0;
+        public void Reload() { }
+
         public readonly HashSet<SpecialAttack> SpecialAttacks;
 
         private readonly IntPtr _pWeaponHolder;

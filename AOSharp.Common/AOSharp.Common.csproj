@@ -45,6 +45,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="IPC\IPCMessage.cs" />
+    <Compile Include="IPC\IPCChannelBase.cs" />
     <Compile Include="GameData\HitType.cs" />
     <Compile Include="GameData\ItemEnums.cs" />
     <Compile Include="GameData\ChatMessageEnums.cs" />

@@ -11,6 +11,7 @@ namespace AOSharp.Core
     {
         public static Dynel Target => GetTargetDynel();
         public static SimpleChar TargetChar => GetTargetChar();
+        public static bool HasTarget => GetTargetIdentity() != Identity.None;
 
         public static void SelectSelf(bool packetOnly = false)
         {

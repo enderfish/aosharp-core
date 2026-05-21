@@ -42,6 +42,8 @@ namespace AOSharp.Core
 
         };
 
+        public static void Send(ChatMessageBody message) { }
+
         public static void Send(MessageBody message)
         {
             byte[] packet = PacketFactory.Create(message);

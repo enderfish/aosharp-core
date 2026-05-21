@@ -28,5 +28,8 @@ namespace AOSharp.Core.UI
         public override void Update()
         {
         }
+
+        public void SetValue(int value) { }
+        public int GetValue() => 0;
     }
 }
