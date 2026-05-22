@@ -215,8 +215,8 @@ namespace AOSharp.Bootstrap
                     if (type.GetInterface("AOSharp.Core.IAOPluginEntry") == null)
                         continue;
 
-                    MethodInfo runMethod = type.GetMethod("Run", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(string) }, null)
-                        ?? type.GetMethod("Run", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
+                    MethodInfo runMethod = type.GetMethod("Run", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null)
+                        ?? type.GetMethod("Run", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(string) }, null);
 
                     if (runMethod == null)
                         continue;

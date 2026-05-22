@@ -58,7 +58,7 @@ namespace AOSharp.Core.Combat
             SimpleChar fightingTarget = DynelManager.LocalPlayer.FightingTarget;
 
             if (fightingTarget != null)
-                SpecialAttacks(fightingTarget);
+                PerformSpecialAttacks(fightingTarget);
 
             foreach (var scalingItemRule in _scalingItemRules.OrderBy(p => (int)p.Priority))
             {
@@ -233,7 +233,7 @@ namespace AOSharp.Core.Combat
             }
         }
 
-        private void SpecialAttacks(SimpleChar target)
+        protected virtual void PerformSpecialAttacks(SimpleChar target)
         {
             foreach (SpecialAttack special in DynelManager.LocalPlayer.SpecialAttacks)
             {
