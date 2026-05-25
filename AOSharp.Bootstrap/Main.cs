@@ -1,4 +1,4 @@
-﻿using AOSharp.Bootstrap.IPC;
+using AOSharp.Bootstrap.IPC;
 using AOSharp.Common.GameData;
 using AOSharp.Common.Unmanaged.DataTypes;
 using AOSharp.Common.Unmanaged.Imports;
@@ -23,6 +23,7 @@ namespace AOSharp.Bootstrap
         private PluginProxy _pluginProxy;
         private ChatSocketListener _chatSocketListener;
         private bool _exiting = false;
+        private DateTime _lastHeartbeat = DateTime.MinValue;
 
         private string _lastChatInput;
         private IntPtr _lastChatInputWindowPtr;
@@ -36,6 +37,13 @@ namespace AOSharp.Bootstrap
             Log.Information("Bootstrap loaded in: {name} (PID={pid})",
                 System.Diagnostics.Process.GetCurrentProcess().ProcessName,
                 System.Diagnostics.Process.GetCurrentProcess().Id);
+
+            AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
+            {
+                string detail = args.ExceptionObject is Exception ex ? ex.ToString() : args.ExceptionObject?.ToString() ?? "(null)";
+                Log.Fatal("Unhandled exception (IsTerminating={term}): {detail}", args.IsTerminating, detail);
+                Log.CloseAndFlush();
+            };
 
             _connectEvent = new ManualResetEvent(false);
             _unloadEvent = new ManualResetEvent(false);
@@ -70,7 +78,7 @@ namespace AOSharp.Bootstrap
             }
             catch (Exception e)
             {
-                Log.Error("SetupHooks failed: {msg}", e.Message);
+                Log.Error(e, "SetupHooks failed");
             }
         }
 
@@ -120,7 +128,7 @@ namespace AOSharp.Bootstrap
             catch (Exception e)
             {
                 //TODO: Send IPC message back to loader on error
-                Log.Error(e.Message);
+                Log.Error(e, "OnAssembliesChanged failed");
             }
         }
 
@@ -236,7 +244,7 @@ namespace AOSharp.Bootstrap
             }
             catch (Exception e)
             {
-                Log.Error("Failed to hook {module}::{func} - {msg}", module, funcName, e.Message);
+                Log.Error(e, "Failed to hook {module}::{func}", module, funcName);
             }
         }
 
@@ -259,13 +267,20 @@ namespace AOSharp.Bootstrap
 
             if (_pluginProxy != null && socket == ChatSocketListener.Socket)
             {
-                byte[] trimmedBuffer = new byte[bytesRead];
-                Marshal.Copy(buffer, trimmedBuffer, 0, bytesRead);
+                try
+                {
+                    byte[] trimmedBuffer = new byte[bytesRead];
+                    Marshal.Copy(buffer, trimmedBuffer, 0, bytesRead);
 
-                List<byte[]> packets = _chatSocketListener.ProcessBuffer(trimmedBuffer);
+                    List<byte[]> packets = _chatSocketListener.ProcessBuffer(trimmedBuffer);
 
-                foreach (byte[] packet in packets)
-                    _pluginProxy.ChatRecv(packet);
+                    foreach (byte[] packet in packets)
+                        _pluginProxy.ChatRecv(packet);
+                }
+                catch (Exception e)
+                {
+                    Log.Error(e, "WsRecv_Hook: plugin chat recv failed");
+                }
             }
 
             return bytesRead;
@@ -273,44 +288,88 @@ namespace AOSharp.Bootstrap
 
         public int DynamicID_GetID_Hook(IntPtr pThis, string name, bool unk)
         {
-            int customId = (_pluginProxy?.GetDynamicIDOverride(name)).GetValueOrDefault(0);
-            return customId > 0 ? customId : DynamicID_t.GetID(pThis, name, unk);
+            try
+            {
+                int customId = (_pluginProxy?.GetDynamicIDOverride(name)).GetValueOrDefault(0);
+                return customId > 0 ? customId : DynamicID_t.GetID(pThis, name, unk);
+            }
+            catch (Exception e)
+            {
+                Log.Error(e, "DynamicID_GetID_Hook failed for name={name}", name);
+                return DynamicID_t.GetID(pThis, name, unk);
+            }
         }
 
         public void MultiListViewItem_Select_Hook(IntPtr pThis, bool selected, bool unk)
         {
             MultiListViewItem_c.Select(pThis, selected, unk);
 
-            _pluginProxy?.MultiListViewItemSelectionChanged(pThis, selected);
+            try
+            {
+                _pluginProxy?.MultiListViewItemSelectionChanged(pThis, selected);
+            }
+            catch (Exception e)
+            {
+                Log.Error(e, "MultiListViewItem_Select_Hook: plugin callback failed");
+            }
         }
 
         public void CheckBox_SlotButtonToggled_Hook(IntPtr pThis, bool enabled)
         {
-            _pluginProxy?.CheckBoxToggled(pThis, enabled);
+            try
+            {
+                _pluginProxy?.CheckBoxToggled(pThis, enabled);
+            }
+            catch (Exception e)
+            {
+                Log.Error(e, "CheckBox_SlotButtonToggled_Hook: plugin callback failed");
+            }
 
             CheckBox_c.SlotButtonToggled(pThis, enabled);
         }
 
         public void ButtonBase_SetValue_Hook(IntPtr pThis, IntPtr pVariant, bool unk)
         {
-            if (!Variant_c.AsBool(pVariant))
-                _pluginProxy?.ButtonPressed(pThis);
+            try
+            {
+                if (!Variant_c.AsBool(pVariant))
+                    _pluginProxy?.ButtonPressed(pThis);
+            }
+            catch (Exception e)
+            {
+                Log.Error(e, "ButtonBase_SetValue_Hook: plugin callback failed");
+            }
 
             ButtonBase_c.SetValue(pThis, pVariant, unk);
         }
 
         public void ContainerOpened_Hook(IntPtr pThis, ref Identity identity, bool unk, bool unk2)
         {
-            _pluginProxy?.ContainerOpened((int)identity.Type, identity.Instance);
+            try
+            {
+                _pluginProxy?.ContainerOpened((int)identity.Type, identity.Instance);
+            }
+            catch (Exception e)
+            {
+                Log.Error(e, "ContainerOpened_Hook: plugin callback failed");
+            }
+
             InventoryGUIModule_c.ContainerOpened(pThis, ref identity, unk, unk2);
         }
 
         public byte ProcessChatInput_Hook(IntPtr pThis, IntPtr pWindow, IntPtr pCmdText)
         {
-            StdString tokenized = StdString.Create();
-            ChatGUIModule_t.ExpandChatTextArgs(tokenized.Pointer, pCmdText);
-            _lastChatInput = tokenized.ToString();
-            _lastChatInputWindowPtr = pWindow;
+            try
+            {
+                StdString tokenized = StdString.Create();
+                ChatGUIModule_t.ExpandChatTextArgs(tokenized.Pointer, pCmdText);
+                _lastChatInput = tokenized.ToString();
+                _lastChatInputWindowPtr = pWindow;
+            }
+            catch (Exception e)
+            {
+                Log.Error(e, "ProcessChatInput_Hook: failed to capture input");
+            }
 
             return CommandInterpreter_c.ProcessChatInput(pThis, pWindow, pCmdText);
         }
@@ -321,8 +380,16 @@ namespace AOSharp.Bootstrap
             result = CommandInterpreter_c.GetCommand(pThis, pCmdText, unk);
             Log.Information("GetCommand_Hook: unk={unk} result={result} lastInput={input} proxyNull={proxyNull}",
                 unk, result, _lastChatInput, _pluginProxy == null);
-            if (result == IntPtr.Zero && unk && _pluginProxy != null)
-                _pluginProxy?.UnknownChatCommand(_lastChatInputWindowPtr, _lastChatInput);
+
+            try
+            {
+                if (result == IntPtr.Zero && unk && _pluginProxy != null)
+                    _pluginProxy?.UnknownChatCommand(_lastChatInputWindowPtr, _lastChatInput);
+            }
+            catch (Exception e)
+            {
+                Log.Error(e, "GetCommand_Hook: plugin callback failed for input={input}", _lastChatInput);
+            }
 
             return result;
         }
@@ -330,9 +397,16 @@ namespace AOSharp.Bootstrap
         public void HandleGroupMessage_Hook(IntPtr pThis, IntPtr pGroupMessage)
         {
             bool cancel = false;
-            
-            if(_pluginProxy != null)
-                cancel = _pluginProxy.HandleGroupMessage(pGroupMessage);
+
+            try
+            {
+                if (_pluginProxy != null)
+                    cancel = _pluginProxy.HandleGroupMessage(pGroupMessage);
+            }
+            catch (Exception e)
+            {
+                Log.Error(e, "HandleGroupMessage_Hook: plugin callback failed");
+            }
 
             if (!cancel)
                 ChatGUIModule_t.HandleGroupMessage(pThis, pGroupMessage);
@@ -347,7 +421,10 @@ namespace AOSharp.Bootstrap
                     _pluginProxy.SentPacket(buf);
                 }
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                Log.Error(e, "Send_Hook: plugin callback failed");
+            }
 
             return Connection_t.Send(pConnection, unk, len, buf);
         }
@@ -364,7 +441,10 @@ namespace AOSharp.Bootstrap
                     _pluginProxy.DataBlockToMessage(dataBlock);
                 }
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                Log.Error(e, "DataBlockToMessage_Hook: plugin callback failed");
+            }
 
             return pMsg;
         }
@@ -378,7 +458,10 @@ namespace AOSharp.Bootstrap
                     _pluginProxy.ViewDeleted(pView);
                 }
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                Log.Error(e, "WindowController_ViewDeleted_Hook: plugin callback failed");
+            }
 
             WindowController_c.ViewDeleted(pThis, pView);
         }
@@ -392,11 +475,13 @@ namespace AOSharp.Bootstrap
                     _pluginProxy.WindowDeleted(pWindow);
                 }
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                Log.Error(e, "WindowController_RemoveWindow_Hook: plugin callback failed");
+            }
 
             WindowController_c.RemoveWindow(pThis, pWindow);
         }
-
 
         private void TeamViewModule_SlotJoinTeamRequest_Hook(IntPtr pThis, ref Identity identity, IntPtr pName)
         {
@@ -407,7 +492,10 @@ namespace AOSharp.Bootstrap
                     _pluginProxy.JoinTeamRequest((int)identity.Type, identity.Instance, pName);
                 }
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                Log.Error(e, "TeamViewModule_SlotJoinTeamRequest_Hook: plugin callback failed");
+            }
         }
 
         private void TeamViewModule_SlotJoinTeamRequestFailed_Hook(IntPtr pThis, ref Identity identity)
@@ -421,7 +509,10 @@ namespace AOSharp.Bootstrap
 
                 N3EngineClientAnarchy_t.TeamJoinRequest(pEngine, ref identity, true);
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                Log.Error(e, "TeamViewModule_SlotJoinTeamRequestFailed_Hook failed");
+            }
         }
 
         private bool N3EngineClientAnarchy_PerformSpecialAction_Hook(IntPtr pThis, ref Identity identity)
@@ -435,19 +526,28 @@ namespace AOSharp.Bootstrap
                     if (specialActionResult)
                         _pluginProxy.ClientPerformedSpecialAction((int)identity.Type, identity.Instance);
                 }
-                    
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                Log.Error(e, "N3EngineClientAnarchy_PerformSpecialAction_Hook: plugin callback failed");
+            }
 
             return specialActionResult;
         }
 
         private unsafe bool N3EngineClientAnarchy_CastNanoSpell_Hook(IntPtr pThis, ref Identity target, ref Identity spell)
         {
-            if (_pluginProxy != null)
+            try
             {
-                if(_pluginProxy.AttemptingSpellCast((int)target.Type, target.Instance, (int)spell.Type, spell.Instance))
-                    return false;
+                if (_pluginProxy != null)
+                {
+                    if (_pluginProxy.AttemptingSpellCast((int)target.Type, target.Instance, (int)spell.Type, spell.Instance))
+                        return false;
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Error(e, "N3EngineClientAnarchy_CastNanoSpell_Hook: plugin callback failed");
             }
 
             return N3EngineClientAnarchy_t.CastNanoSpell(pThis, ref target, ref spell);
@@ -465,7 +565,10 @@ namespace AOSharp.Bootstrap
                         _pluginProxy.OptionPanelActivated(pThis, unk);
                 }
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                Log.Error(e, "OptionPanelModule_ModuleActivated_Hook: plugin callback failed");
+            }
         }
 
         public unsafe void FlowControlModule_t_TeleportStarted_Hook()
@@ -478,7 +581,10 @@ namespace AOSharp.Bootstrap
                         _pluginProxy.TeleportStarted();
                 }
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                Log.Error(e, "FlowControlModule_t_TeleportStarted_Hook: plugin callback failed");
+            }
 
             FlowControlModule_t.TeleportStartedMessage();
         }
@@ -490,7 +596,10 @@ namespace AOSharp.Bootstrap
                 if (_pluginProxy != null)
                     _pluginProxy.TeleportFailed();
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                Log.Error(e, "TeleportTrier_t_TeleportFailed_Hook: plugin callback failed");
+            }
 
             TeleportTrier_t.TeleportFailed(pThis);
         }
@@ -503,7 +612,10 @@ namespace AOSharp.Bootstrap
                 if (_pluginProxy != null)
                     _pluginProxy.TeleportEnded();
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                Log.Error(e, "N3EngineClientAnarchy_SendInPlayMessage_Hook: plugin callback failed");
+            }
 
             return result;
         }
@@ -517,14 +629,24 @@ namespace AOSharp.Bootstrap
                 if (_pluginProxy != null)
                     _pluginProxy.PlayfieldInit(id);
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                Log.Error(e, "N3EngineClientAnarchy_PlayfieldInit_Hook: plugin callback failed (playfieldId={id})", id);
+            }
         }
 
         public void N3EngineClientAnarchy_RunEngine_Hook(IntPtr pThis, float deltaTime)
         {
             try
             {
-                if(_exiting)
+                if ((DateTime.UtcNow - _lastHeartbeat).TotalSeconds >= 10.0)
+                {
+                    Log.Debug("Heartbeat: pluginProxy={hasProxy} exiting={exiting}",
+                        _pluginProxy != null, _exiting);
+                    _lastHeartbeat = DateTime.UtcNow;
+                }
+
+                if (_exiting)
                 {
                     UnhookAll();
 
@@ -543,7 +665,7 @@ namespace AOSharp.Bootstrap
                     //Notify the main thread that it is time to unload the dll.
                     _unloadEvent.Set();
                     _exiting = false;
-                } 
+                }
                 else if (_pluginProxy != null)
                 {
                     _pluginProxy.RunPluginInitializations();
@@ -555,7 +677,10 @@ namespace AOSharp.Bootstrap
                     _pluginProxy.Update(deltaTime);
                 }
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                Log.Error(e, "N3EngineClientAnarchy_RunEngine_Hook failed");
+            }
         }
 
         public void N3Playfield_t__AddChildDynel_Hook(IntPtr pThis, IntPtr pDynel, IntPtr pos, IntPtr rot)
@@ -568,7 +693,10 @@ namespace AOSharp.Bootstrap
                 if (_pluginProxy != null)
                     _pluginProxy.DynelSpawned(pDynel);
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                Log.Error(e, "N3Playfield_t__AddChildDynel_Hook: plugin callback failed");
+            }
         }
     }
 }

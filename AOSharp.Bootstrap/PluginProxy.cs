@@ -300,7 +300,7 @@ namespace AOSharp.Bootstrap
             }
             catch (Exception ex)
             {
-                Serilog.Log.Error("Plugin.Initialize failed for {type}: {msg}", _instance.GetType().FullName, ex.Message);
+                Serilog.Log.Error(ex, "Plugin.Initialize failed for {type}", _instance.GetType().FullName);
             }
 
             Initialized = true;
@@ -312,7 +312,10 @@ namespace AOSharp.Bootstrap
             {
                 _teardownMethod.Invoke(_instance, null);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Serilog.Log.Error(ex, "Plugin.Teardown failed for {type}", _instance.GetType().FullName);
+            }
         }
     }
 }
