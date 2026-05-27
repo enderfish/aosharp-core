@@ -33,6 +33,15 @@ namespace AOSharp.Core
         {
         }
 
+        public void GetDoorPosRot(int doorIndex, ref Vector3 pos, ref Quaternion rot)
+        {
+            IntPtr pTilemap = Playfield.GetTilemap();
+            if (pTilemap == IntPtr.Zero) return;
+            N3Room_t.GetDoorPosRot(Pointer, doorIndex, pTilemap, ref pos, ref rot);
+        }
+
+        public int GetDoorConnectZone(int doorIndex) => N3Room_t.GetDoorConnectZone(Pointer, doorIndex);
+
         private Rect GetRect()
         {
             Rect rect;

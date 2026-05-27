@@ -88,6 +88,8 @@ namespace AOSharp.Core
 
         public static IEnumerable<Door> Doors => DynelManager.Doors;
 
+        public static int NumFloors => IsDungeon ? Rooms.Select(r => r.Floor).Distinct().Count() : 0;
+
         //TODO: Convert to use n3Playfield_t::GetPlayfieldDynels() to remove dependencies on hard-coded offsets
         internal static unsafe List<IntPtr> GetPlayfieldDynels()
         {
