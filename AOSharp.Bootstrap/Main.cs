@@ -31,6 +31,7 @@ namespace AOSharp.Bootstrap
         public Main(RemoteHooking.IContext inContext, String inChannelName)
         {
             Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Debug()
                 .WriteTo.File("AOSharp.Bootstrapper.txt", restrictedToMinimumLevel: Serilog.Events.LogEventLevel.Debug)
                 .CreateLogger();
 
