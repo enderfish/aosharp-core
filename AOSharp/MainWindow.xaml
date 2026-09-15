@@ -68,10 +68,17 @@
                             Visibility="{Binding ActiveProfile.IsInjected, Converter={StaticResource BoolToHiddenConverter}}"
                             Click="InjectButton_Clicked">Inject</Button>
                 </Grid>
-                <Button Width="100" 
-                        HorizontalAlignment="Right"
-                        Margin="3"
-                        Click="ShowAddPluginDialog">Add Plugin</Button>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Width="100"
+                            Margin="3"
+                            Click="InjectAllButton_Clicked">Inject All</Button>
+                    <Button Width="100"
+                            Margin="3"
+                            Click="EjectAllButton_Clicked">Eject All</Button>
+                    <Button Width="100"
+                            Margin="3"
+                            Click="ShowAddPluginDialog">Add Plugin</Button>
+                </StackPanel>
             </Grid>
             <DataGrid Name="PluginsDataGrid"
                       ItemsSource="{Binding Path=Plugins}"

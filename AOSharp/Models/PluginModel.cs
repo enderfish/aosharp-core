@@ -14,7 +14,17 @@ namespace AOSharp
     {
         public string Name { get; set; }
 
-        public string Version { get; set; }
+        private string _version;
+
+        public string Version
+        {
+            get { return _version; }
+            set
+            {
+                _version = value;
+                OnPropertyChanged("Version");
+            }
+        }
 
         public string Path { get; set; }
 

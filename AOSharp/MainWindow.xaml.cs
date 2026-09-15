@@ -40,6 +40,8 @@ namespace AOSharp
 
         public Config Config;
 
+        private readonly ProfilesModel _profilesModel;
+
         private Profile _activeProfile;
 
         public Profile ActiveProfile
@@ -81,12 +83,15 @@ namespace AOSharp
                 Config.Save();
             };
 
+            RefreshPluginVersions();
+
             this.DataContext = this;
 
             InitializeComponent();
 
             PluginsDataGrid.DataContext = Config;
-            ProfileListBox.DataContext = new ProfilesModel(Config);
+            _profilesModel = new ProfilesModel(Config);
+            ProfileListBox.DataContext = _profilesModel;
         }
 
         private async void ShowAddPluginDialog(object sender, RoutedEventArgs e)
@@ -165,6 +170,8 @@ namespace AOSharp
         {
             Profile profile = (Profile)ProfileListBox.SelectedItem;
 
+            RefreshPluginVersions();
+
             HasProfileSelected = profile != null;
             ActiveProfile = profile;
 
@@ -175,9 +182,10 @@ namespace AOSharp
 
                 PluginsDataGrid.IsEnabled = false;
             }
-            else if(!PluginsDataGrid.IsEnabled)
+            else
             {
-                PluginsDataGrid.IsEnabled = true;
+                // Lock the plugin list for injected profiles, same as after Inject; otherwise switching profiles re-enabled it
+                PluginsDataGrid.IsEnabled = !profile.IsInjected;
             }
 
             foreach (KeyValuePair<string, PluginModel> plugin in Config.Plugins)
@@ -219,6 +227,75 @@ namespace AOSharp
             profile.Eject();
 
             PluginsDataGrid.IsEnabled = true;
+        }
+
+        private async void InjectAllButton_Clicked(object sender, RoutedEventArgs e)
+        {
+            Button button = (Button)sender;
+            button.IsEnabled = false;
+
+            List<string> failed = new List<string>();
+            List<string> noPlugins = new List<string>();
+
+            try
+            {
+                foreach (Profile profile in _profilesModel.Profiles.Where(x => x.IsActive && !x.IsInjected && x.Process != null).ToList())
+                {
+                    List<string> plugins = Config.Plugins.Where(x => profile.EnabledPlugins.Contains(x.Key)).Select(x => x.Value.Path).ToList();
+
+                    if (!plugins.Any())
+                    {
+                        noPlugins.Add(profile.Name.Trim());
+                        continue;
+                    }
+
+                    // One client at a time and off the UI thread: Inject blocks while the bootstrap pipe connects
+                    if (!await Task.Run(() => profile.Inject(plugins)))
+                        failed.Add(profile.Name.Trim());
+                }
+            }
+            finally
+            {
+                button.IsEnabled = true;
+            }
+
+            PluginsDataGrid.IsEnabled = ActiveProfile != null && !ActiveProfile.IsInjected;
+
+            if (failed.Any() || noPlugins.Any())
+            {
+                StringBuilder message = new StringBuilder();
+
+                if (failed.Any())
+                    message.AppendLine($"Failed to inject: {string.Join(", ", failed)}");
+
+                if (noPlugins.Any())
+                    message.AppendLine($"No plugins selected: {string.Join(", ", noPlugins)}");
+
+                await this.ShowMessageAsync("Inject All", message.ToString().TrimEnd());
+            }
+        }
+
+        private void EjectAllButton_Clicked(object sender, RoutedEventArgs e)
+        {
+            foreach (Profile profile in _profilesModel.Profiles.Where(x => x.IsInjected).ToList())
+                profile.Eject();
+
+            PluginsDataGrid.IsEnabled = ActiveProfile != null;
+        }
+
+        // Show each plugin DLL's current file version instead of the one recorded when it was added
+        private void RefreshPluginVersions()
+        {
+            foreach (PluginModel plugin in Config.Plugins.Values)
+            {
+                if (!File.Exists(plugin.Path))
+                    continue;
+
+                string fileVersion = FileVersionInfo.GetVersionInfo(plugin.Path).FileVersion;
+
+                if (plugin.Version != fileVersion)
+                    plugin.Version = fileVersion;
+            }
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
