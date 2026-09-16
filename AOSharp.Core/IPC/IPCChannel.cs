@@ -176,6 +176,15 @@ namespace AOSharp.Core.IPC
             _typeInfo.InitializeSubTypesForAssembly(assembly);
         }
 
+        /// <summary>
+        /// Registers a single IPC message type. Use this for message classes that live in a shared library rather than
+        /// in the plugin assembly itself, since only plugin assemblies are scanned automatically on load.
+        /// </summary>
+        public static void LoadMessage(Type messageType)
+        {
+            _typeInfo.InitializeSubType(messageType);
+        }
+
         public bool SetChannelId(byte channelId)
         {
             if (_ipcChannels.Any(x => x._channelId == channelId))

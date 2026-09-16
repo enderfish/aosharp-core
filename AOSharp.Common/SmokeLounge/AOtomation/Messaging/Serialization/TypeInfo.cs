@@ -82,22 +82,29 @@ namespace SmokeLounge.AOtomation.Messaging.Serialization
         {
             var types = assembly.GetTypes().Where(t => t.BaseType == this.type);
             foreach (var subType in types)
-            {
-                var contract =
-                    subType.GetCustomAttributes(typeof(AoContractAttribute), false)
-                           .Cast<AoContractAttribute>()
-                           .FirstOrDefault();
+                InitializeSubType(subType);
+        }
 
-                if (contract == null)
-                    continue;
+        /// <summary>Registers one contract type (a subclass of the root type carrying AoContract). Other types are ignored.</summary>
+        public void InitializeSubType(Type subType)
+        {
+            if (subType.BaseType != this.type)
+                return;
 
-                var typeInfo = new TypeInfo(subType);
+            var contract =
+                subType.GetCustomAttributes(typeof(AoContractAttribute), false)
+                       .Cast<AoContractAttribute>()
+                       .FirstOrDefault();
 
-                if (this.subTypes.ContainsKey(contract.Identifier))
-                    throw new ContractIdCollisionException($"Contracts must have unique identifiers. {typeInfo.Type.Name}({contract.Identifier}) shares the same identifier as {this.subTypes[contract.Identifier].Type.Name}({contract.Identifier})");
+            if (contract == null)
+                return;
 
-                this.subTypes.Add(contract.Identifier, typeInfo);
-            }
+            var typeInfo = new TypeInfo(subType);
+
+            if (this.subTypes.ContainsKey(contract.Identifier))
+                throw new ContractIdCollisionException($"Contracts must have unique identifiers. {typeInfo.Type.Name}({contract.Identifier}) shares the same identifier as {this.subTypes[contract.Identifier].Type.Name}({contract.Identifier})");
+
+            this.subTypes.Add(contract.Identifier, typeInfo);
         }
 
         #endregion
