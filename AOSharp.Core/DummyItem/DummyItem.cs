@@ -126,17 +126,33 @@ namespace AOSharp.Core
             return MeetsUseReqs(ignoreTargetReqs: true);
         }
 
-        public unsafe bool MeetsUseReqs(SimpleChar target = null, bool ignoreTargetReqs = false)
+        public bool MeetsUseReqs(SimpleChar target = null, bool ignoreTargetReqs = false)
         {
-            IntPtr pEngine;
-            if ((pEngine = N3Engine_t.GetInstance()) == IntPtr.Zero)
+            if (N3Engine_t.GetInstance() == IntPtr.Zero)
                 return false;
 
-            IntPtr pCriteria = N3EngineClientAnarchy_t.GetItemActionInfo(Pointer, ItemActionInfo.UseCriteria);
+            List<RequirementCriterion> criteria = GetUseRequirements();
 
             //Should I return true or false here? hmm.
-            if (pCriteria == IntPtr.Zero)
+            if (criteria == null)
                 return true;
+
+            ReqChecker reqChecker = new ReqChecker(criteria);
+
+            return reqChecker.MeetsReqs(target, ignoreTargetReqs);
+        }
+
+        /// <summary>
+        /// Returns the raw use-criteria of this item/nano in the client's postfix order
+        /// (stat checks interleaved with And/Or/Not and OnUser/OnTarget scope switches),
+        /// or null when the item has no use criteria.
+        /// </summary>
+        public unsafe List<RequirementCriterion> GetUseRequirements()
+        {
+            IntPtr pCriteria = N3EngineClientAnarchy_t.GetItemActionInfo(Pointer, ItemActionInfo.UseCriteria);
+
+            if (pCriteria == IntPtr.Zero)
+                return null;
 
             List<RequirementCriterion> criteria = new List<RequirementCriterion>();
 
@@ -150,12 +166,7 @@ namespace AOSharp.Core
                 });
             }
 
-            //foreach(var req in criteria)
-            //    Chat.WriteLine($"Param1: {req.Param1}, Param2: {req.Param2}, Op: {req.Operator}");
-
-            ReqChecker reqChecker = new ReqChecker(criteria);
-
-            return reqChecker.MeetsReqs(target, ignoreTargetReqs);
+            return criteria;
         }
 
         public int GetStat(Stat stat, int detail = 2)
