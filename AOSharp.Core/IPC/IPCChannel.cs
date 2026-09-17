@@ -133,7 +133,26 @@ namespace AOSharp.Core.IPC
             catch (Exception e)
             {
                 //If you get this message and it concerns you please create an issue or contact me on Discord!
-                Chat.WriteLine($"Failed to process IPC message {e.Message}");
+                Chat.WriteLine($"Failed to process IPC message ({DescribePacket(msgBytes)}): {e.Message}");
+            }
+        }
+
+        /// <summary>Opcode, sender and size of a raw packet, for the failure message above.</summary>
+        private static string DescribePacket(byte[] msgBytes)
+        {
+            try
+            {
+                using (MemoryStream stream = new MemoryStream(msgBytes))
+                {
+                    StreamReader reader = new StreamReader(stream) { Position = 5 };
+                    int charId = reader.ReadInt32();
+                    short opCode = reader.ReadInt16();
+                    return $"opcode {opCode}, from client {charId}, {msgBytes.Length} bytes";
+                }
+            }
+            catch
+            {
+                return $"{msgBytes?.Length ?? 0} bytes";
             }
         }
 
@@ -174,6 +193,15 @@ namespace AOSharp.Core.IPC
         public static void LoadMessages(Assembly assembly)
         {
             _typeInfo.InitializeSubTypesForAssembly(assembly);
+        }
+
+        /// <summary>
+        /// Registers a single IPC message type. Use this for message classes that live in a shared library rather than
+        /// in the plugin assembly itself, since only plugin assemblies are scanned automatically on load.
+        /// </summary>
+        public static void LoadMessage(Type messageType)
+        {
+            _typeInfo.InitializeSubType(messageType);
         }
 
         public bool SetChannelId(byte channelId)
