@@ -1,6 +1,7 @@
 using AOSharp.Common.GameData;
 using AOSharp.Common.SharedEventArgs;
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -238,7 +239,8 @@ namespace AOSharp.Bootstrap
                     if (instance == null)
                         continue;
 
-                    _plugins.Add(new Plugin(instance, runMethod, teardownMethod, Path.GetDirectoryName(assemblyPath)));
+                    lock (_plugins)
+                        _plugins.Add(new Plugin(instance, runMethod, teardownMethod, Path.GetDirectoryName(assemblyPath)));
                 }
             }
             catch (Exception ex)
@@ -249,7 +251,13 @@ namespace AOSharp.Bootstrap
 
         public void RunPluginInitializations()
         {
-            foreach (Plugin plugin in _plugins)
+            // LoadPlugin adds to _plugins from the pipe thread while this runs on the game thread; enumerate a snapshot
+            // so a plugin arriving mid-loop doesn't abort the initialization of the ones already loaded.
+            Plugin[] plugins;
+            lock (_plugins)
+                plugins = _plugins.ToArray();
+
+            foreach (Plugin plugin in plugins)
             {
                 if (plugin.Initialized)
                     continue;
